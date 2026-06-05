@@ -68,7 +68,7 @@ spec:
       containers:
       - name: airflow-scheduler
         image: gcr.io/eloquent-marker-454311-j5/airflow-spark:latest
-        command: ["airflow", "scheduler"]
+        command: ["airflow", "scheduler", "--skip-serve-logs"]
         resources:
           limits:
             memory: "1.5Gi"
