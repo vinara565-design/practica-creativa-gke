@@ -12,7 +12,7 @@ import predict_utils
 # Set up Flask, Mongo and Elasticsearch
 app = Flask(__name__)
 
-client = MongoClient()
+client = MongoClient(os.environ.get('MONGO_URI', 'mongodb://localhost:27017'))
 
 from pyelasticsearch import ElasticSearch
 elastic = ElasticSearch(config.ELASTIC_URL)
@@ -25,7 +25,13 @@ import datetime
 
 # Setup Kafka
 from kafka import KafkaProducer
-producer = KafkaProducer(bootstrap_servers=['localhost:9092'],api_version=(0,10))
+from flask_socketio import SocketIO, emit
+import threading
+from kafka import KafkaConsumer
+import json as json_lib
+
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+producer = KafkaProducer(bootstrap_servers=[os.environ.get('KAFKA_BROKERS', 'localhost:9092')])
 PREDICTION_TOPIC = 'flight-delay-ml-request'
 
 import uuid
@@ -537,9 +543,56 @@ def shutdown():
   shutdown_server()
   return 'Server shutting down...'
 
-if __name__ == "__main__":
-    app.run(
-    debug=True,
-    host='0.0.0.0',
-    port='5001'
+def kafka_consumer_thread():
+  import time
+  from kafka import KafkaConsumer
+  time.sleep(5)
+  consumer = KafkaConsumer(
+    'flight-delay-ml-response',
+    bootstrap_servers=[os.environ.get('KAFKA_BROKERS', 'localhost:9092')],
+    value_deserializer=lambda m: json_lib.loads(m.decode('utf-8')),
+    auto_offset_reset='latest',
+    group_id=None,
+    consumer_timeout_ms=1000
   )
+  while True:
+    try:
+      for message in consumer:
+        prediction = message.value
+        print(f"Prediction received: {prediction}", flush=True)
+        socketio.emit('prediction', prediction, namespace='/')
+        
+        # Guardar en Cassandra
+        try:
+          cassandra_host = os.environ.get('CASSANDRA_HOST', 'localhost')
+          from cassandra.cluster import Cluster
+          cluster = Cluster([cassandra_host], port=9042)
+          session = cluster.connect('agile_data_science')
+          session.execute("""
+            INSERT INTO flight_delay_ml_response 
+            (uuid, origin, dest, carrier, depdelay, prediction, timestamp, route, distance)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+          """, (
+            prediction.get('UUID'),
+            prediction.get('Origin'),
+            prediction.get('Dest'),
+            prediction.get('Carrier'),
+            prediction.get('DepDelay'),
+            prediction.get('Prediction'),
+            prediction.get('Timestamp'),
+            prediction.get('Route'),
+            prediction.get('Distance')
+          ))
+          cluster.shutdown()
+          print(f"Saved to Cassandra: {prediction.get('UUID')}", flush=True)
+        except Exception as ce:
+          print(f"Cassandra error: {ce}", flush=True)
+    except Exception as e:
+      print(f"Consumer error: {e}", flush=True)
+    time.sleep(0.1)
+
+if __name__ == "__main__":
+  import time
+
+  threading.Thread(target=kafka_consumer_thread, daemon=True).start()
+  socketio.run(app, debug=False, host='0.0.0.0', port=5001, allow_unsafe_werkzeug=True)

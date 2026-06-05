@@ -1,0 +1,13 @@
+NAME               TYPE           CLUSTER-IP       EXTERNAL-IP      PORT(S)             AGE
+airflow-svc        LoadBalancer   34.118.239.233   34.140.137.178   8085:31743/TCP      27h
+cassandra          ClusterIP      34.118.234.193   <none>           9042/TCP            6d21h
+flask              LoadBalancer   34.118.239.108   34.79.23.239     5001:30001/TCP      28h
+grafana-svc        LoadBalancer   34.118.238.228   35.187.85.178    3000:31670/TCP      28h
+kafka              ClusterIP      None             <none>           9092/TCP            6d21h
+kafka-ui-svc       LoadBalancer   34.118.238.55    34.77.237.134    8090:31586/TCP      28h
+kubernetes         ClusterIP      34.118.224.1     <none>           443/TCP             6d21h
+minio              ClusterIP      34.118.226.73    <none>           9000/TCP,9001/TCP   6d21h
+mlflow-svc         LoadBalancer   34.118.225.99    34.79.83.122     5000:30314/TCP      28h
+mongo              ClusterIP      None             <none>           27017/TCP           6d21h
+prometheus-svc     ClusterIP      34.118.233.164   <none>           9090/TCP            6d21h
+spark-master-svc   ClusterIP      34.118.235.134   <none>           7077/TCP,8080/TCP   6d21h

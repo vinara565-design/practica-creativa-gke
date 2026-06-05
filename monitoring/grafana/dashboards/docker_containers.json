@@ -1,0 +1,45 @@
+{
+  "title": "Docker Containers - Practica Creativa",
+  "panels": [
+    {
+      "title": "CPU Usage por Contenedor",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "rate(container_cpu_usage_seconds_total{image!=\"\"}[1m]) * 100",
+        "legendFormat": "{{name}}"
+      }]
+    },
+    {
+      "title": "Memoria Usada por Contenedor (MB)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "container_memory_usage_bytes{image!=\"\"} / 1024 / 1024",
+        "legendFormat": "{{name}}"
+      }]
+    },
+    {
+      "title": "Contenedores Corriendo",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "count(container_last_seen{image!=\"\"})"
+      }]
+    },
+    {
+      "title": "Memoria Total Usada (MB)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "expr": "sum(container_memory_usage_bytes{image!=\"\"}) / 1024 / 1024"
+      }]
+    }
+  ],
+  "time": {"from": "now-15m", "to": "now"},
+  "refresh": "10s"
+}

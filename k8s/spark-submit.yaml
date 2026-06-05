@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spark-submit-job
+  labels:
+    app: spark-submit
+spec:
+  template:
+    metadata:
+      labels:
+        app: spark-submit
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: spark-submit
+        image: villa823/spark-base:4.1.1
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            spark-submit \
+              --class es.upm.dit.ging.predictor.MakePrediction \
+              --master spark://spark-master-svc:7077 \
+              --deploy-mode cluster \
+              --repositories https://repo1.maven.org/maven2 \
+              --packages org.mongodb.spark:mongo-spark-connector_2.13:10.4.1,org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.1 \
+              --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 \
+              --conf spark.hadoop.fs.s3a.access.key=minioadmin \
+              --conf spark.hadoop.fs.s3a.secret.key=minioadmin \
+              --conf spark.hadoop.fs.s3a.path.style.access=true \
+              --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \
+              --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider \
+              s3a://lakehouse/flight_prediction_2.13-0.1.jar
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongo:27017"
+        - name: KAFKA_BROKERS
+          value: "kafka:9092"
+        - name: APP_BASE_PATH
+          value: "s3a://lakehouse"
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"   # Bajamos drásticamente los requisitos mínimos
+            cpu: "100m"       # Solo pedimos 0.1 cores para poder planificarlo

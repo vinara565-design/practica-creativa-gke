@@ -32,13 +32,24 @@ def strip_place(url):
   return p
 
 def get_flight_distance(client, origin, dest):
-  """Get the distance between a pair of airport codes"""
-  query = {
-    "Origin": origin,
-    "Dest": dest,
-  }
-  record = client.agile_data_science.origin_dest_distances.find_one(query)
-  return record["Distance"]
+  """Get the distance between a pair of airport codes from Cassandra"""
+  import os
+  from cassandra.cluster import Cluster
+  
+  cassandra_host = os.environ.get('CASSANDRA_HOST', 'localhost')
+  cluster = Cluster([cassandra_host], port=9042)
+  session = cluster.connect('agile_data_science')
+  
+  row = session.execute(
+    "SELECT distance FROM origin_dest_distances WHERE origin=%s AND dest=%s",
+    (origin, dest)
+  ).one()
+  
+  cluster.shutdown()
+  
+  if row:
+    return row.distance
+  return 0.0
 
 def get_regression_date_args(iso_date):
   """Given an ISO Date, return the day of year, day of month, day of week as the API expects them."""

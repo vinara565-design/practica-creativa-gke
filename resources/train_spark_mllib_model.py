@@ -11,6 +11,8 @@ def main(base_path):
   except NameError: base_path = "."
   if not base_path:
     base_path = "."
+
+  models_path = os.environ.get("MODELS_PATH", "{}/models".format(base_path))
   
   APP_NAME = "train_spark_mllib_model.py"
   
@@ -24,7 +26,30 @@ def main(base_path):
     import pyspark.sql
     
     sc = pyspark.SparkContext()
-    spark = pyspark.sql.SparkSession(sc).builder.appName(APP_NAME).getOrCreate()
+    spark = pyspark.sql.SparkSession(sc).builder\
+      .appName(APP_NAME)\
+      .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000"))\
+      .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ACCESS_KEY", "minioadmin"))\
+      .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("MINIO_SECRET_KEY", "minioadmin"))\
+      .config("spark.hadoop.fs.s3a.path.style.access", "true")\
+      .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")\
+      .config("spark.hadoop.fs.s3a.connection.establish.timeout", "60000")\
+      .config("spark.hadoop.fs.s3a.connection.timeout", "60000")\
+      .config("spark.hadoop.fs.s3a.threads.keepalivetime", "60000")\
+      .config("spark.hadoop.fs.s3a.multipart.purge.age", "86400000")\
+      .getOrCreate()
+
+    # Forzar configuración numérica en el contexto de Hadoop
+    sc._jsc.hadoopConfiguration().set("fs.s3a.connection.establish.timeout", "60000")
+    sc._jsc.hadoopConfiguration().set("fs.s3a.connection.timeout", "60000")
+    sc._jsc.hadoopConfiguration().set("fs.s3a.threads.keepalivetime", "60000")
+    sc._jsc.hadoopConfiguration().set("fs.s3a.multipart.purge.age", "86400000")
+    sc._jsc.hadoopConfiguration().set("fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000"))
+    sc._jsc.hadoopConfiguration().set("fs.s3a.access.key", os.environ.get("MINIO_ACCESS_KEY", "minioadmin"))
+    sc._jsc.hadoopConfiguration().set("fs.s3a.secret.key", os.environ.get("MINIO_SECRET_KEY", "minioadmin"))
+    sc._jsc.hadoopConfiguration().set("fs.s3a.path.style.access", "true")
+    sc._jsc.hadoopConfiguration().set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+    sc._jsc.hadoopConfiguration().set("fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
   
   #
   # {
@@ -53,8 +78,9 @@ def main(base_path):
     StructField("Origin", StringType(), True),      # "Origin":"TUS"
   ])
   
-  input_path = "{}/data/simple_flight_delay_features.jsonl.bz2".format(
-    base_path
+  input_path = os.environ.get(
+    "TRAINING_DATA_PATH",
+    "s3a://lakehouse/raw/flights/simple_flight_delay_features.jsonl"
   )
   features = spark.read.json(input_path, schema=schema)
   features.first()
@@ -94,7 +120,7 @@ def main(base_path):
   )
   
   # Save the bucketizer
-  arrival_bucketizer_path = "{}/models/arrival_bucketizer_2.0.bin".format(base_path)
+  arrival_bucketizer_path = "{}/arrival_bucketizer_2.0.bin".format(models_path)
   arrival_bucketizer.write().overwrite().save(arrival_bucketizer_path)
   
   # Apply the bucketizer
@@ -120,10 +146,7 @@ def main(base_path):
     ml_bucketized_features = ml_bucketized_features.drop(column)
     
     # Save the pipeline model
-    string_indexer_output_path = "{}/models/string_indexer_model_{}.bin".format(
-      base_path,
-      column
-    )
+    string_indexer_output_path = "{}/string_indexer_model_{}.bin".format(models_path, column)
     string_indexer_model.write().overwrite().save(string_indexer_output_path)
   
   # Combine continuous, numeric fields with indexes of nominal ones
@@ -141,7 +164,7 @@ def main(base_path):
   final_vectorized_features = vector_assembler.transform(ml_bucketized_features)
   
   # Save the numeric vector assembler
-  vector_assembler_path = "{}/models/numeric_vector_assembler.bin".format(base_path)
+  vector_assembler_path = "{}/numeric_vector_assembler.bin".format(models_path)
   vector_assembler.write().overwrite().save(vector_assembler_path)
   
   # Drop the index columns
@@ -163,9 +186,7 @@ def main(base_path):
   model = rfc.fit(final_vectorized_features)
   
   # Save the new model over the old one
-  model_output_path = "{}/models/spark_random_forest_classifier.flight_delays.5.0.bin".format(
-    base_path
-  )
+  model_output_path = "{}/spark_random_forest_classifier.flight_delays.5.0.bin".format(models_path)
   model.write().overwrite().save(model_output_path)
   
   # Evaluate model using test data
@@ -179,6 +200,21 @@ def main(base_path):
   )
   accuracy = evaluator.evaluate(predictions)
   print("Accuracy = {}".format(accuracy))
+
+  # Registrar en MLflow
+  try:
+    import mlflow
+    mlflow_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
+    mlflow.set_tracking_uri(mlflow_uri)
+    mlflow.set_experiment("flight_delay_prediction")
+    with mlflow.start_run():
+      mlflow.log_metric("accuracy", accuracy)
+      mlflow.log_param("algorithm", "RandomForest")
+      mlflow.log_param("training_data", input_path)
+      mlflow.log_param("models_path", models_path)
+      print("Metrics logged to MLflow")
+  except Exception as e:
+    print(f"MLflow logging failed (non-critical): {e}")
   
   # Check the distribution of predictions
   predictions.groupBy("Prediction").count().show()

@@ -1,0 +1,167 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      cloud.google.com/neg: '{"ingress":true}'
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"app":"flask"},"name":"flask","namespace":"default"},"spec":{"ports":[{"nodePort":30001,"port":5001,"targetPort":5001}],"selector":{"app":"flask"},"type":"LoadBalancer"}}
+      networking.gke.io/target-pool: ae2e31c1b465f42a79a3c58cfaf2c519
+    creationTimestamp: "2026-05-29T17:36:30Z"
+    finalizers:
+    - gke.networking.io/l4-netlb-v1
+    - service.kubernetes.io/load-balancer-cleanup
+    labels:
+      app: flask
+    name: flask
+    namespace: default
+    resourceVersion: "1780076234592511024"
+    uid: e2e31c1b-465f-42a7-9a3c-58cfaf2c5196
+  spec:
+    allocateLoadBalancerNodePorts: true
+    clusterIP: 34.118.239.108
+    clusterIPs:
+    - 34.118.239.108
+    externalTrafficPolicy: Cluster
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - nodePort: 30001
+      port: 5001
+      protocol: TCP
+      targetPort: 5001
+    selector:
+      app: flask
+    sessionAffinity: None
+    type: LoadBalancer
+  status:
+    loadBalancer:
+      ingress:
+      - ip: 35.195.202.35
+        ipMode: VIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      cloud.google.com/neg: '{"ingress":true}'
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"name":"grafana-svc","namespace":"default"},"spec":{"ports":[{"port":3000,"targetPort":3000}],"selector":{"app":"grafana"},"type":"LoadBalancer"}}
+      networking.gke.io/target-pool: a05f2c9af1c854e7abd77ed920224438
+    creationTimestamp: "2026-05-29T17:36:31Z"
+    finalizers:
+    - gke.networking.io/l4-netlb-v1
+    - service.kubernetes.io/load-balancer-cleanup
+    name: grafana-svc
+    namespace: default
+    resourceVersion: "1780076236107503011"
+    uid: 05f2c9af-1c85-4e7a-bd77-ed9202244383
+  spec:
+    allocateLoadBalancerNodePorts: true
+    clusterIP: 34.118.238.228
+    clusterIPs:
+    - 34.118.238.228
+    externalTrafficPolicy: Cluster
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - nodePort: 31670
+      port: 3000
+      protocol: TCP
+      targetPort: 3000
+    selector:
+      app: grafana
+    sessionAffinity: None
+    type: LoadBalancer
+  status:
+    loadBalancer:
+      ingress:
+      - ip: 34.78.106.44
+        ipMode: VIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      cloud.google.com/neg: '{"ingress":true}'
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"name":"kafka-ui-svc","namespace":"default"},"spec":{"ports":[{"port":8090,"targetPort":8080}],"selector":{"app":"kafka-ui"},"type":"LoadBalancer"}}
+      networking.gke.io/target-pool: a9c099c92d6a84cc787940fb412078f5
+    creationTimestamp: "2026-05-29T17:36:31Z"
+    finalizers:
+    - gke.networking.io/l4-netlb-v1
+    - service.kubernetes.io/load-balancer-cleanup
+    name: kafka-ui-svc
+    namespace: default
+    resourceVersion: "1780076254129535006"
+    uid: 9c099c92-d6a8-4cc7-8794-0fb412078f59
+  spec:
+    allocateLoadBalancerNodePorts: true
+    clusterIP: 34.118.238.55
+    clusterIPs:
+    - 34.118.238.55
+    externalTrafficPolicy: Cluster
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - nodePort: 31586
+      port: 8090
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      app: kafka-ui
+    sessionAffinity: None
+    type: LoadBalancer
+  status:
+    loadBalancer:
+      ingress:
+      - ip: 34.156.175.7
+        ipMode: VIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      cloud.google.com/neg: '{"ingress":true}'
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"name":"mlflow-svc","namespace":"default"},"spec":{"ports":[{"port":5000,"targetPort":5000}],"selector":{"app":"mlflow"},"type":"LoadBalancer"}}
+      networking.gke.io/target-pool: af38438d0a48f4eaf8780e3ef8dc073f
+    creationTimestamp: "2026-05-29T17:36:32Z"
+    finalizers:
+    - gke.networking.io/l4-netlb-v1
+    - service.kubernetes.io/load-balancer-cleanup
+    name: mlflow-svc
+    namespace: default
+    resourceVersion: "1780076242181599020"
+    uid: f38438d0-a48f-4eaf-8780-e3ef8dc073f1
+  spec:
+    allocateLoadBalancerNodePorts: true
+    clusterIP: 34.118.225.99
+    clusterIPs:
+    - 34.118.225.99
+    externalTrafficPolicy: Cluster
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - nodePort: 30314
+      port: 5000
+      protocol: TCP
+      targetPort: 5000
+    selector:
+      app: mlflow
+    sessionAffinity: None
+    type: LoadBalancer
+  status:
+    loadBalancer:
+      ingress:
+      - ip: 34.77.1.230
+        ipMode: VIP
+kind: List
+metadata:
+  resourceVersion: ""

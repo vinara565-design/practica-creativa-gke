@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  labels:
+    app: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+      - name: mlflow
+        image: ghcr.io/mlflow/mlflow:v2.11.1
+        ports:
+        - containerPort: 5000
+        command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "sqlite:///mlflow.db", "--default-artifact-root", "s3a://lakehouse/mlflow"]
+        env:
+        # Apuntamos al servicio interno de MinIO en tu Kubernetes
+        - name: MLFLOW_S3_ENDPOINT_URL
+          value: "http://minio:9000"
+        - name: AWS_ACCESS_KEY_ID
+          value: "minioadmin"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "minioadmin"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-svc
+spec:
+  type: LoadBalancer # Para que puedas entrar a la interfaz web de MLflow desde tu casa
+  ports:
+  - port: 5000
+    targetPort: 5000
+  selector:
+    app: mlflow

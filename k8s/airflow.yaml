@@ -1,0 +1,189 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-rwo
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+  labels:
+    app: airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+  template:
+    metadata:
+      labels:
+        app: airflow
+    spec:
+      securityContext:
+        runAsUser: 50000
+        fsGroup: 0
+
+      initContainers:
+      - name: airflow-db-init
+        image: gcr.io/eloquent-marker-454311-j5/airflow-spark:latest
+        command: ["bash", "-c"]
+        args:
+          - |
+            airflow db migrate &&
+            airflow users create \
+              --username admin \
+              --firstname Admin \
+              --lastname User \
+              --role Admin \
+              --email admin@example.com \
+              --password admin || true
+        env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "SequentialExecutor"
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          value: "sqlite:////opt/airflow/data/airflow.db"
+        - name: AIRFLOW__CORE__LOAD_EXAMPLES
+          value: "false"
+        - name: AIRFLOW__WEBSERVER__SECRET_KEY
+          value: "practica-creativa-secret-key-2026"
+        - name: AIRFLOW__SCHEDULER__PROCESSOR_POLL_INTERVAL
+          value: "30"
+        - name: AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL
+          value: "60"
+        - name: AIRFLOW__SCHEDULER__HEARTRATE
+          value: "10"
+        - name: AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD
+          value: "300"
+        volumeMounts:
+        - name: airflow-data
+          mountPath: /opt/airflow/data
+
+      containers:
+      - name: airflow-scheduler
+        image: gcr.io/eloquent-marker-454311-j5/airflow-spark:latest
+        command: ["airflow", "scheduler"]
+        resources:
+          limits:
+            memory: "1.5Gi"
+            cpu: "2000m"
+          requests:
+            memory: "512Mi"
+            cpu: "150m"
+        env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "SequentialExecutor"
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          value: "sqlite:////opt/airflow/data/airflow.db"
+        - name: AIRFLOW__CORE__LOAD_EXAMPLES
+          value: "false"
+        - name: AIRFLOW__WEBSERVER__SECRET_KEY
+          value: "practica-creativa-secret-key-2026"
+        - name: AIRFLOW__CORE__PARALLELISM
+          value: "1"
+        - name: AIRFLOW__SCHEDULER__PROCESSOR_POLL_INTERVAL
+          value: "30"
+        - name: AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL
+          value: "60"
+        - name: AIRFLOW__SCHEDULER__HEARTRATE
+          value: "10"
+        - name: AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_THRESHOLD
+          value: "300"
+        - name: MINIO_ENDPOINT
+          value: "http://minio:9000"
+        - name: MINIO_ACCESS_KEY
+          value: "minioadmin"
+        - name: MINIO_SECRET_KEY
+          value: "minioadmin"
+        - name: SPARK_MASTER
+          value: "spark://spark-master-svc:7077"
+        - name: SPARK_LOCAL_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: SPARK_DRIVER_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow-svc:5000"
+        - name: JAVA_HOME
+          value: "/usr/lib/jvm/java-17-openjdk-amd64"
+        - name: SPARK_HOME
+          value: "/opt/spark"
+        volumeMounts:
+        - name: airflow-data
+          mountPath: /opt/airflow/data
+        - name: airflow-dag
+          mountPath: /opt/airflow/dags
+
+      - name: airflow-webserver
+        image: gcr.io/eloquent-marker-454311-j5/airflow-spark:latest
+        command: ["airflow", "webserver"]
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "512Mi"
+            cpu: "100m"
+        env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "SequentialExecutor"
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          value: "sqlite:////opt/airflow/data/airflow.db"
+        - name: AIRFLOW__CORE__LOAD_EXAMPLES
+          value: "false"
+        - name: AIRFLOW__WEBSERVER__SECRET_KEY
+          value: "practica-creativa-secret-key-2026"
+        - name: AIRFLOW__WEBSERVER__WORKERS
+          value: "1"
+        - name: AIRFLOW__WEBSERVER__WORKER_TIMEOUT
+          value: "300"
+        volumeMounts:
+        - name: airflow-data
+          mountPath: /opt/airflow/data
+        - name: airflow-dag
+          mountPath: /opt/airflow/dags
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          failureThreshold: 10
+
+      volumes:
+      - name: airflow-data
+        persistentVolumeClaim:
+          claimName: airflow-pvc
+      - name: airflow-dag
+        configMap:
+          name: airflow-dag
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-svc
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8085
+    targetPort: 8080
+  selector:
+    app: airflow

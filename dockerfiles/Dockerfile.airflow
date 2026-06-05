@@ -1,0 +1,36 @@
+FROM apache/airflow:2.8.1-python3.10
+
+USER root
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        openjdk-17-jdk \
+        wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+ENV SPARK_VERSION=4.1.1
+ENV HADOOP_VERSION=3
+ENV SPARK_HOME=/opt/spark
+
+RUN wget -q https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz && \
+    tar -xzf spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz -C /opt/ && \
+    mv /opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION} ${SPARK_HOME} && \
+    rm spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz
+
+# Recuperamos el PATH de la Fase 1 (limpio y sin sobreescrituras conflictivas)
+ENV PATH="${SPARK_HOME}/bin:${PATH}"
+
+USER airflow
+
+# Capa 1: Proveedores oficiales de Spark
+RUN pip install --no-cache-dir \
+    "apache-airflow-providers-apache-spark==4.8.1" \
+    findspark
+
+# Capa 2: MLflow + Parche de email-validator (en paso separado para proteger el core)
+RUN pip install --no-cache-dir \
+    mlflow \
+    "email-validator>=2.0"

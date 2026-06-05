@@ -1,0 +1,169 @@
+apiVersion: v1
+data:
+  .airflowignore: ^\..
+  train_spark_mllib_model.py: "# !/usr/bin/env python\n\nimport sys, os, re\nfrom
+    os import environ\n\n# Pass date and base path to main() from airflow\ndef main(base_path):\n
+    \ \n  # Default to \".\"\n  try: base_path\n  except NameError: base_path = \".\"\n
+    \ if not base_path:\n    base_path = \".\"\n\n  models_path = os.environ.get(\"MODELS_PATH\",
+    \"{}/models\".format(base_path))\n  \n  APP_NAME = \"train_spark_mllib_model.py\"\n
+    \ \n  # If there is no SparkSession, create the environment\n  try:\n    sc and
+    spark\n  except (NameError, UnboundLocalError) as e:\n    import findspark\n    findspark.init()\n
+    \   import pyspark\n    import pyspark.sql\n    \n    sc = pyspark.SparkContext()\n
+    \   spark = pyspark.sql.SparkSession(sc).builder\\\n      .appName(APP_NAME)\\\n
+    \     .config(\"spark.hadoop.fs.s3a.endpoint\", os.environ.get(\"MINIO_ENDPOINT\",
+    \"http://localhost:9000\"))\\\n      .config(\"spark.hadoop.fs.s3a.access.key\",
+    os.environ.get(\"MINIO_ACCESS_KEY\", \"minioadmin\"))\\\n      .config(\"spark.hadoop.fs.s3a.secret.key\",
+    os.environ.get(\"MINIO_SECRET_KEY\", \"minioadmin\"))\\\n      .config(\"spark.hadoop.fs.s3a.path.style.access\",
+    \"true\")\\\n      .config(\"spark.hadoop.fs.s3a.impl\", \"org.apache.hadoop.fs.s3a.S3AFileSystem\")\\\n
+    \     .config(\"spark.hadoop.fs.s3a.connection.establish.timeout\", \"60000\")\\\n
+    \     .config(\"spark.hadoop.fs.s3a.connection.timeout\", \"60000\")\\\n      .config(\"spark.hadoop.fs.s3a.threads.keepalivetime\",
+    \"60000\")\\\n      .config(\"spark.hadoop.fs.s3a.multipart.purge.age\", \"86400000\")\\\n
+    \     .getOrCreate()\n\n    # Forzar configuración numérica en el contexto de
+    Hadoop\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.connection.establish.timeout\",
+    \"60000\")\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.connection.timeout\",
+    \"60000\")\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.threads.keepalivetime\",
+    \"60000\")\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.multipart.purge.age\",
+    \"86400000\")\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.endpoint\", os.environ.get(\"MINIO_ENDPOINT\",
+    \"http://localhost:9000\"))\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.access.key\",
+    os.environ.get(\"MINIO_ACCESS_KEY\", \"minioadmin\"))\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.secret.key\",
+    os.environ.get(\"MINIO_SECRET_KEY\", \"minioadmin\"))\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.path.style.access\",
+    \"true\")\n    sc._jsc.hadoopConfiguration().set(\"fs.s3a.impl\", \"org.apache.hadoop.fs.s3a.S3AFileSystem\")\n
+    \   sc._jsc.hadoopConfiguration().set(\"fs.s3a.aws.credentials.provider\", \"org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider\")\n
+    \ \n  #\n  # {\n  #   \"ArrDelay\":5.0,\"CRSArrTime\":\"2015-12-31T03:20:00.000-08:00\",\"CRSDepTime\":\"2015-12-31T03:05:00.000-08:00\",\n
+    \ #   \"Carrier\":\"WN\",\"DayOfMonth\":31,\"DayOfWeek\":4,\"DayOfYear\":365,\"DepDelay\":14.0,\"Dest\":\"SAN\",\"Distance\":368.0,\n
+    \ #   \"FlightDate\":\"2015-12-30T16:00:00.000-08:00\",\"FlightNum\":\"6109\",\"Origin\":\"TUS\"\n
+    \ # }\n  #\n  from pyspark.sql.types import StringType, IntegerType, FloatType,
+    DoubleType, DateType, TimestampType\n  from pyspark.sql.types import StructType,
+    StructField\n  from pyspark.sql.functions import udf\n  \n  schema = StructType([\n
+    \   StructField(\"ArrDelay\", DoubleType(), True),     # \"ArrDelay\":5.0\n    StructField(\"CRSArrTime\",
+    TimestampType(), True),    # \"CRSArrTime\":\"2015-12-31T03:20:00.000-08:00\"\n
+    \   StructField(\"CRSDepTime\", TimestampType(), True),    # \"CRSDepTime\":\"2015-12-31T03:05:00.000-08:00\"\n
+    \   StructField(\"Carrier\", StringType(), True),     # \"Carrier\":\"WN\"\n    StructField(\"DayOfMonth\",
+    IntegerType(), True), # \"DayOfMonth\":31\n    StructField(\"DayOfWeek\", IntegerType(),
+    True),  # \"DayOfWeek\":4\n    StructField(\"DayOfYear\", IntegerType(), True),
+    \ # \"DayOfYear\":365\n    StructField(\"DepDelay\", DoubleType(), True),     #
+    \"DepDelay\":14.0\n    StructField(\"Dest\", StringType(), True),        # \"Dest\":\"SAN\"\n
+    \   StructField(\"Distance\", DoubleType(), True),     # \"Distance\":368.0\n
+    \   StructField(\"FlightDate\", DateType(), True),    # \"FlightDate\":\"2015-12-30T16:00:00.000-08:00\"\n
+    \   StructField(\"FlightNum\", StringType(), True),   # \"FlightNum\":\"6109\"\n
+    \   StructField(\"Origin\", StringType(), True),      # \"Origin\":\"TUS\"\n  ])\n
+    \ \n  input_path = os.environ.get(\n    \"TRAINING_DATA_PATH\",\n    \"s3a://lakehouse/raw/flights/simple_flight_delay_features.jsonl\"\n
+    \ )\n  features = spark.read.json(input_path, schema=schema)\n  features.first()\n
+    \ \n  #\n  # Check for nulls in features before using Spark ML\n  #\n  null_counts
+    = [(column, features.where(features[column].isNull()).count()) for column in features.columns]\n
+    \ cols_with_nulls = filter(lambda x: x[1] > 0, null_counts)\n  print(list(cols_with_nulls))\n
+    \ \n  #\n  # Add a Route variable to replace FlightNum\n  #\n  from pyspark.sql.functions
+    import lit, concat\n  features_with_route = features.withColumn(\n    'Route',\n
+    \   concat(\n      features.Origin,\n      lit('-'),\n      features.Dest\n    )\n
+    \ )\n  features_with_route.show(6)\n  \n  #\n  # Use pysmark.ml.feature.Bucketizer
+    to bucketize ArrDelay into on-time, slightly late, very late (0, 1, 2)\n  #\n
+    \ from pyspark.ml.feature import Bucketizer\n  \n  # Setup the Bucketizer\n  splits
+    = [-float(\"inf\"), -15.0, 0, 30.0, float(\"inf\")]\n  arrival_bucketizer = Bucketizer(\n
+    \   splits=splits,\n    inputCol=\"ArrDelay\",\n    outputCol=\"ArrDelayBucket\"\n
+    \ )\n  \n  # Save the bucketizer\n  arrival_bucketizer_path = \"{}/arrival_bucketizer_2.0.bin\".format(models_path)\n
+    \ arrival_bucketizer.write().overwrite().save(arrival_bucketizer_path)\n  \n  #
+    Apply the bucketizer\n  ml_bucketized_features = arrival_bucketizer.transform(features_with_route)\n
+    \ ml_bucketized_features.select(\"ArrDelay\", \"ArrDelayBucket\").show()\n  \n
+    \ #\n  # Extract features tools in with pyspark.ml.feature\n  #\n  from pyspark.ml.feature
+    import StringIndexer, VectorAssembler\n  \n  # Turn category fields into indexes\n
+    \ for column in [\"Carrier\", \"Origin\", \"Dest\", \"Route\"]:\n    string_indexer
+    = StringIndexer(\n      inputCol=column,\n      outputCol=column + \"_index\"\n
+    \   )\n    \n    string_indexer_model = string_indexer.fit(ml_bucketized_features)\n
+    \   ml_bucketized_features = string_indexer_model.transform(ml_bucketized_features)\n
+    \   \n    # Drop the original column\n    ml_bucketized_features = ml_bucketized_features.drop(column)\n
+    \   \n    # Save the pipeline model\n    string_indexer_output_path = \"{}/string_indexer_model_{}.bin\".format(models_path,
+    column)\n    string_indexer_model.write().overwrite().save(string_indexer_output_path)\n
+    \ \n  # Combine continuous, numeric fields with indexes of nominal ones\n  # ...into
+    one feature vector\n  numeric_columns = [\n    \"DepDelay\", \"Distance\",\n    \"DayOfMonth\",
+    \"DayOfWeek\",\n    \"DayOfYear\"]\n  index_columns = [\"Carrier_index\", \"Origin_index\",\n
+    \                  \"Dest_index\", \"Route_index\"]\n  vector_assembler = VectorAssembler(\n
+    \   inputCols=numeric_columns + index_columns,\n    outputCol=\"Features_vec\"\n
+    \ )\n  final_vectorized_features = vector_assembler.transform(ml_bucketized_features)\n
+    \ \n  # Save the numeric vector assembler\n  vector_assembler_path = \"{}/numeric_vector_assembler.bin\".format(models_path)\n
+    \ vector_assembler.write().overwrite().save(vector_assembler_path)\n  \n  # Drop
+    the index columns\n  for column in index_columns:\n    final_vectorized_features
+    = final_vectorized_features.drop(column)\n  \n  # Inspect the finalized features\n
+    \ final_vectorized_features.show()\n  \n  # Instantiate and fit random forest
+    classifier on all the data\n  from pyspark.ml.classification import RandomForestClassifier\n
+    \ rfc = RandomForestClassifier(\n    featuresCol=\"Features_vec\",\n    labelCol=\"ArrDelayBucket\",\n
+    \   predictionCol=\"Prediction\",\n    maxBins=4657,\n    maxMemoryInMB=1024\n
+    \ )\n  model = rfc.fit(final_vectorized_features)\n  \n  # Save the new model
+    over the old one\n  model_output_path = \"{}/spark_random_forest_classifier.flight_delays.5.0.bin\".format(models_path)\n
+    \ model.write().overwrite().save(model_output_path)\n  \n  # Evaluate model using
+    test data\n  predictions = model.transform(final_vectorized_features)\n  \n  from
+    pyspark.ml.evaluation import MulticlassClassificationEvaluator\n  evaluator =
+    MulticlassClassificationEvaluator(\n    predictionCol=\"Prediction\",\n    labelCol=\"ArrDelayBucket\",\n
+    \   metricName=\"accuracy\"\n  )\n  accuracy = evaluator.evaluate(predictions)\n
+    \ print(\"Accuracy = {}\".format(accuracy))\n\n  # Registrar en MLflow\n  try:\n
+    \   import mlflow\n    mlflow_uri = os.environ.get(\"MLFLOW_TRACKING_URI\", \"http://localhost:5000\")\n
+    \   mlflow.set_tracking_uri(mlflow_uri)\n    mlflow.set_experiment(\"flight_delay_prediction\")\n
+    \   with mlflow.start_run():\n      mlflow.log_metric(\"accuracy\", accuracy)\n
+    \     mlflow.log_param(\"algorithm\", \"RandomForest\")\n      mlflow.log_param(\"training_data\",
+    input_path)\n      mlflow.log_param(\"models_path\", models_path)\n      print(\"Metrics
+    logged to MLflow\")\n  except Exception as e:\n    print(f\"MLflow logging failed
+    (non-critical): {e}\")\n  \n  # Check the distribution of predictions\n  predictions.groupBy(\"Prediction\").count().show()\n
+    \ \n  # Check a sample\n  predictions.sample(False, 0.001, 18).orderBy(\"CRSDepTime\").show(6)\n\nif
+    __name__ == \"__main__\":\n  main(sys.argv[1])\n"
+  training_dag.py: |-
+    from airflow import DAG
+    from airflow.operators.bash import BashOperator
+    from datetime import datetime, timedelta
+
+
+    default_args = {
+        'owner': 'airflow',
+        'depends_on_past': False,
+        'start_date': datetime(2026, 1, 1),
+        'retries': 1,
+        'retry_delay': timedelta(minutes=5),
+    }
+
+
+    with DAG(
+        'flight_delay_model_training',
+        default_args=default_args,
+        description='Entrena el modelo en el cluster Spark leyendo de MinIO/Lakehouse',
+        schedule_interval='@weekly',
+        catchup=False,
+    ) as dag:
+
+        train_model = BashOperator(
+            task_id='train_model_spark_cluster',
+            bash_command="""
+                export DRIVER_IP=$(printenv SPARK_LOCAL_IP)
+                spark-submit \
+                    --master spark://spark-master-svc:7077 \
+                    --conf spark.driver.host=${DRIVER_IP} \
+                    --conf spark.driver.bindAddress=0.0.0.0 \
+                    --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
+                    --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 \
+                    --conf spark.hadoop.fs.s3a.access.key=minioadmin \
+                    --conf spark.hadoop.fs.s3a.secret.key=minioadmin \
+                    --conf spark.hadoop.fs.s3a.path.style.access=true \
+                    --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \
+                    --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false \
+                    --conf spark.hadoop.fs.s3a.connection.establish.timeout=60000 \
+                    --conf spark.hadoop.fs.s3a.connection.timeout=60000 \
+                    --conf spark.pyspark.python=python3 \
+                    /opt/airflow/dags/train_spark_mllib_model.py /app
+            """,
+            append_env=True,
+            env={
+                'MODELS_PATH': 's3a://lakehouse/models',
+                'MINIO_ENDPOINT': 'http://minio:9000',
+                'MINIO_ACCESS_KEY': 'minioadmin',
+                'MINIO_SECRET_KEY': 'minioadmin',
+                'TRAINING_DATA_PATH': 's3a://lakehouse/raw/flights/simple_flight_delay_features.jsonl',
+                'MLFLOW_TRACKING_URI': 'http://mlflow-svc:5000',
+                'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
+                'SPARK_HOME': '/opt/spark',
+                'PATH': '/opt/spark/bin:/usr/local/bin:/usr/bin:/bin',
+            },
+        )
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2026-06-05T10:33:21Z"
+  name: airflow-dag
+  namespace: default
+  resourceVersion: "1780655601221759020"
+  uid: 9136b48e-caed-4269-b890-1cd6c3ef82c1

@@ -19,7 +19,7 @@ object MakePrediction {
     import spark.implicits._
 
     //Load the arrival delay bucketizer
-    val base_path= "/Users/admin/Downloads/practica_creativa"
+    val base_path= sys.env.getOrElse("APP_BASE_PATH", "s3a://lakehouse")
     val arrivalBucketizerPath = "%s/models/arrival_bucketizer_2.0.bin".format(base_path)
     print(arrivalBucketizerPath.toString())
     val arrivalBucketizer = Bucketizer.load(arrivalBucketizerPath)
@@ -44,7 +44,7 @@ object MakePrediction {
     val df = spark
       .readStream
       .format("kafka")
-      .option("kafka.bootstrap.servers", "localhost:9092")
+      .option("kafka.bootstrap.servers", sys.env.getOrElse("KAFKA_BROKERS", "localhost:9092"))
       .option("subscribe", "flight-delay-ml-request")
       .load()
     df.printSchema()
@@ -137,24 +137,37 @@ object MakePrediction {
     finalPredictions.printSchema()
 
     // define a streaming query
+    // Inspect the output
+    finalPredictions.printSchema()
+
+    // Stream 1: Escribir en MongoDB
     val dataStreamWriter = finalPredictions
       .writeStream
       .format("mongodb")
-      .option("spark.mongodb.connection.uri", "mongodb://127.0.0.1:27017")
+      .option("spark.mongodb.connection.uri", sys.env.getOrElse("MONGO_URI", "mongodb://127.0.0.1:27017"))
       .option("spark.mongodb.database", "agile_data_science")
-      .option("checkpointLocation", "/tmp")
+      .option("checkpointLocation", "/tmp/mongo-checkpoint")
       .option("spark.mongodb.collection", "flight_delay_ml_response")
       .outputMode("append")
-
-    // run the query
     val query = dataStreamWriter.start()
-    // Console Output for predictions
 
+    // Stream 2: Escribir en Kafka (topic flight-delay-ml-response)
+    import org.apache.spark.sql.functions.{to_json, col}
+    val kafkaStreamWriter = finalPredictions
+      .select(to_json(org.apache.spark.sql.functions.struct(finalPredictions.columns.map(col): _*)).alias("value"))
+      .writeStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", sys.env.getOrElse("KAFKA_BROKERS", "localhost:9092"))
+      .option("topic", "flight-delay-ml-response")
+      .option("checkpointLocation", "/tmp/kafka-checkpoint")
+      .outputMode("append")
+    val kafkaQuery = kafkaStreamWriter.start()
+
+    // Stream 3: Console output
     val consoleOutput = finalPredictions.writeStream
       .outputMode("append")
       .format("console")
       .start()
     consoleOutput.awaitTermination()
   }
-
 }
