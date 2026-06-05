@@ -23,7 +23,11 @@ spec:
               --master spark://spark-master-svc:7077 \
               --deploy-mode cluster \
               --repositories https://repo1.maven.org/maven2 \
-              --packages org.mongodb.spark:mongo-spark-connector_2.13:10.4.1,org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.1 \
+              --packages org.mongodb.spark:mongo-spark-connector_2.13:10.4.1,org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.1,org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.11.0 \
+              --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
+              --conf spark.sql.catalog.lakehouse=org.apache.iceberg.spark.SparkCatalog \
+              --conf spark.sql.catalog.lakehouse.type=hadoop \
+              --conf spark.sql.catalog.lakehouse.warehouse=s3a://lakehouse/iceberg_warehouse \
               --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 \
               --conf spark.hadoop.fs.s3a.access.key=minioadmin \
               --conf spark.hadoop.fs.s3a.secret.key=minioadmin \
@@ -43,5 +47,5 @@ spec:
             memory: "512Mi"
             cpu: "500m"
           requests:
-            memory: "128Mi"   # Bajamos drásticamente los requisitos mínimos
-            cpu: "100m"       # Solo pedimos 0.1 cores para poder planificarlo
+            memory: "128Mi"
+            cpu: "100m"

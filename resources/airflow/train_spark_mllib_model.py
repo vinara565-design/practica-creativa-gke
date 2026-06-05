@@ -16,17 +16,16 @@ def main(base_path):
   
   APP_NAME = "train_spark_mllib_model.py"
   
-    # Forma estándar y profesional de inicializar Spark
-    # getOrCreate() reutiliza la sesión si ya existe o crea una nueva si no.
-    spark = SparkSession.builder \
-        .appName(APP_NAME) \
-        .getOrCreate()
+  # If there is no SparkSession, create the environment
+  try:
+    sc and spark
+  except (NameError, UnboundLocalError) as e:
+    import findspark
+    findspark.init()
+    import pyspark
+    import pyspark.sql
     
-    # Si necesitas el SparkContext (sc) para operaciones de bajo nivel (RDDs)
-    sc = spark.sparkContext
-
-    print("Spark Session iniciada correctamente")
-
+    sc = pyspark.SparkContext()
     spark = pyspark.sql.SparkSession(sc).builder\
       .appName(APP_NAME)\
       .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MINIO_ENDPOINT", "http://localhost:9000"))\
@@ -83,7 +82,10 @@ def main(base_path):
     "TRAINING_DATA_PATH",
     "s3a://lakehouse/raw/flights/simple_flight_delay_features.jsonl"
   )
-  features = spark.read.json(input_path, schema=schema)
+  raw_df = spark.read.json(input_path, schema=schema)
+  spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.default")
+  raw_df.writeTo("lakehouse.default.flight_data").using("iceberg").createOrReplace()
+  features = spark.read.format("iceberg").load("lakehouse.default.flight_data")
   features.first()
   
   #

@@ -48,7 +48,7 @@ Entorno utilizado para la compilación del artefacto de Scala, construcción de 
 
 ##  Mejoras Adicionales Implementadas
 
-* **Orquestación (Apache Airflow):** Pipeline semanal automatizado (`training_dag.py`) para el reentrenamiento del modelo ML sin interrupciones de servicio.
+* **Orquestación y MLOps:** Pipeline de reentrenamiento semanal automatizado en **Apache Airflow** conectado a un Lakehouse centralizado en **MinIO** con **Apache Iceberg** como formato de tabla (S3 compatible). Los datos de entrenamiento se escriben y leen en formato Parquet mediante tablas Iceberg.
 * **Ciclo de Vida ML (MLflow):** Tracking completo de experimentos, métricas, parámetros y registro formal de modelos bajo el experimento `flight_delay_prediction`.
 * **Lakehouse Centralizado (MinIO):** Repositorio S3-compatible para el almacenamiento persistente de los binarios del modelo entrenado.
 * **Monitorización y Observabilidad:** Stack **Prometheus** + **Grafana** con dashboards provisionados automáticamente para la supervisión en tiempo real del clúster.

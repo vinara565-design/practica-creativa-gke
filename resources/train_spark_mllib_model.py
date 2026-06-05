@@ -82,7 +82,10 @@ def main(base_path):
     "TRAINING_DATA_PATH",
     "s3a://lakehouse/raw/flights/simple_flight_delay_features.jsonl"
   )
-  features = spark.read.json(input_path, schema=schema)
+  raw_df = spark.read.json(input_path, schema=schema)
+  spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.default")
+  raw_df.writeTo("lakehouse.default.flight_data").using("iceberg").createOrReplace()
+  features = spark.read.format("iceberg").load("lakehouse.default.flight_data")
   features.first()
   
   #

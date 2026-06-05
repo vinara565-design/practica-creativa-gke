@@ -48,7 +48,7 @@ data:
     \   StructField(\"FlightNum\", StringType(), True),   # \"FlightNum\":\"6109\"\n
     \   StructField(\"Origin\", StringType(), True),      # \"Origin\":\"TUS\"\n  ])\n
     \ \n  input_path = os.environ.get(\n    \"TRAINING_DATA_PATH\",\n    \"s3a://lakehouse/raw/flights/simple_flight_delay_features.jsonl\"\n
-    \ )\n  features = spark.read.json(input_path, schema=schema)\n  features.first()\n
+    \ )\n  raw_df = spark.read.json(input_path, schema=schema)\n  raw_df.writeTo(\"lakehouse.default.flight_data\").using(\"iceberg\").createOrReplace()\n  features = spark.read.format(\"iceberg\").load(\"lakehouse.default.flight_data\")\n  features.first()\n
     \ \n  #\n  # Check for nulls in features before using Spark ML\n  #\n  null_counts
     = [(column, features.where(features[column].isNull()).count()) for column in features.columns]\n
     \ cols_with_nulls = filter(lambda x: x[1] > 0, null_counts)\n  print(list(cols_with_nulls))\n
@@ -130,22 +130,24 @@ data:
         train_model = BashOperator(
             task_id='train_model_spark_cluster',
             bash_command="""
-                export DRIVER_IP=$(printenv SPARK_LOCAL_IP)
                 spark-submit \
                     --master spark://spark-master-svc:7077 \
-                    --conf spark.driver.host=${DRIVER_IP} \
-                    --conf spark.driver.bindAddress=0.0.0.0 \
-                    --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
+                    --deploy-mode cluster \
+                    --packages org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.11.0 \
+                    --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
+                    --conf spark.sql.catalog.lakehouse=org.apache.iceberg.spark.SparkCatalog \
+                    --conf spark.sql.catalog.lakehouse.type=hadoop \
+                    --conf spark.sql.catalog.lakehouse.warehouse=s3a://lakehouse/iceberg_warehouse \
                     --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 \
                     --conf spark.hadoop.fs.s3a.access.key=minioadmin \
                     --conf spark.hadoop.fs.s3a.secret.key=minioadmin \
                     --conf spark.hadoop.fs.s3a.path.style.access=true \
                     --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \
                     --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false \
-                    --conf spark.hadoop.fs.s3a.connection.establish.timeout=60000 \
-                    --conf spark.hadoop.fs.s3a.connection.timeout=60000 \
                     --conf spark.pyspark.python=python3 \
-                    /opt/airflow/dags/train_spark_mllib_model.py /app
+                    --conf spark.driver.memory=2g \
+                    --conf spark.executor.memory=2g \
+                    s3a://lakehouse/train_spark_mllib_model.py s3a://lakehouse
             """,
             append_env=True,
             env={
